@@ -1,0 +1,221 @@
+#########################################################################
+# LEGALESE:   Copyright (c) 2008, Suntec Inc.
+# 
+#   This source code is confidential, proprietary, and contains trade
+#   secrets that are the sole property of Suntec Inc,.
+#   Copy and/or distribution of this source code or disassembly or
+#   reverse engineering of the resultant object code are strictly
+#   forbidden without the written consent of Suntec Inc,.
+#  -----------------------------------------------------------------------
+# 
+#  FILE NAME  :  Makefile
+#  -----------
+# 
+#  DESCRIPTION :
+#  -----------
+#   This make file is crated for application development environment. 
+#   The user must source MakeEnv at project top level to setup the 
+#   project make global environment variables.
+# 
+#  MODIFICATION HISTORY
+#  --------------------
+#  Thu Jul 10 12:00:00 PST 2009:created by Iori
+# 
+##########################################################################
+
+#
+# Top Level Makefile for all purposes
+#
+include $(MAKE_RULE_DIR)/config.mk
+
+BUILD_OUTSIDE		:= n
+
+DECOMPRESS_LOCK		:= $(TARGET_OBJ_DIR)/.decompress_lock
+CONFIGURE_LOCK		:= $(TARGET_OBJ_DIR)/.configure_lock
+COMPILE_LOCK		:= $(TARGET_OBJ_DIR)/.compile_lock
+
+ifeq ("x$(PKG_DIR_NAME)", "x")
+PKG_DIR				:= $(patsubst %.tar,%,$(patsubst %.gz,%,$(patsubst %.bz2,%,$(PKG_NAME))))
+else
+PKG_DIR				:= $(PKG_DIR_NAME)
+endif
+#
+# -- define rules to make the target objects
+#
+all:	pre_process \
+		check_dependent \
+		pkg_decompress \
+		user_pre_process \
+		apply_patch \
+		check_user_define 
+
+#
+# -- define Common Rules 
+#
+
+#
+# -- define rules that pre_process
+#
+pre_process:
+	@if [ "$(BUILD_OUTSIDE)" = "y" ] ; then \
+		$(MKDIR) $(TARGET_OBJ_DIR)/$(TARGET_OBJ_DIR) ; \
+	else \
+		$(MKDIR) $(TARGET_OBJ_DIR) ; \
+	fi ;
+
+
+#
+# -- user define targets
+#
+user_pre_process:
+	@if [ "x$(USER_PRE_PROCESS)" != "x" ] ; then \
+		for var_user_target in $(USER_PRE_PROCESS) ; do \
+			$(MAKE) -f Makefile PLATFORM=$(PLATFORM) $$var_user_target ; \
+		done ; \
+    fi ;
+
+#
+# -- check dependent
+#
+check_dependent:
+	@if [ "x$(DEPENDENT_PKG)" != "x" ] ; then \
+		for var_dependent in $(DEPENDENT_PKG) ; do \
+			$(MAKE) -C $(OPEN_SRC_DIR)/$$var_dependent -f Makefile PLATFORM=$(PLATFORM) || exit 1 ; \
+		done ; \
+    fi ;
+#
+# -- uncompress the package
+#
+pkg_decompress:
+	@if [ ! -f $(DECOMPRESS_LOCK) ] ; then \
+		if [ "x$(PKG_NAME)" != "x" ] ; then \
+			cd $(TARGET_OBJ_DIR) ; \
+			if [ "x$(findstring tar.gz,$(PKG_NAME))" != "x" ] ; then \
+				$(TAR) zxvf ../$(PKG_NAME) || exit 1 ;\
+			elif [ "x$(findstring tar.bz2, $(PKG_NAME))" != "x" ] ; then \
+				$(TAR) jxvf ../$(PKG_NAME) || exit 1 ;\
+			fi ; \
+			cd - ; \
+			$(RM) $(CONFIGURE_LOCK) $(COMPILE_LOCK) ; \
+			$(TOUCH) $(DECOMPRESS_LOCK) ; \
+		else \
+			if [ "x$(PKG_DIR)" != "x" ] ; then \
+				$(CP) -ar $(PKG_DIR) $(TARGET_OBJ_DIR)/ ; \
+				$(RM) $(CONFIGURE_LOCK) $(COMPILE_LOCK) ; \
+				$(TOUCH) $(DECOMPRESS_LOCK) ; \
+			fi ; \
+		fi ; \
+	fi ;
+
+#
+# -- apply patches
+#
+apply_patch:
+	@$(ECHO) "+++ apply patch $(PKG_DIR)"
+	@if [ "x$(PATCHES)" != "x" ] ; then \
+		cd $(TARGET_OBJ_DIR)/$(PKG_DIR) ;  \
+	    for patch in $(PATCHES) ; do \
+	        $(PATCH) --strip 1 < ../../patches/$$patch ; \
+	    done ; \
+	fi ;
+
+#
+# -- pre configure
+#
+check_user_define:
+	@if [ "x$(USER_DEFINE_COMPILE)" != "x" ] ; then \
+		for var_user_target in $(USER_DEFINE_COMPILE) ; do \
+			$(MAKE) -f Makefile PLATFORM=$(PLATFORM) $$var_user_target ; \
+		done ; \
+	else \
+		$(MAKE) PLATFORM=$(PLATFORM) pre_configure || exit 1 ; \
+		$(MAKE) PLATFORM=$(PLATFORM) install || exit 1 ; \
+    fi ;
+#
+# -- pre configure
+#
+pre_configure:
+	@if [ "$(BUILD_OUTSIDE)" = "y" ] ; then \
+		$(CP) $(MAKE_RULE_DIR)/Makefile.open $(TARGET_OBJ_DIR)/$(TARGET_OBJ_DIR)/Makefile.target ; \
+		if [ ! -f $(CONFIGURE_LOCK) ] ; then \
+			$(MAKE) -C $(TARGET_OBJ_DIR)/$(TARGET_OBJ_DIR) -f Makefile.target configuration || exit 1 ; \
+			$(RM) $(COMPILE_LOCK) ; \
+			$(TOUCH) $(CONFIGURE_LOCK) ; \
+		fi ; \
+		if [ ! -f $(COMPILE_LOCK) ] ; then \
+			$(MAKE) -C $(TARGET_OBJ_DIR)/$(TARGET_OBJ_DIR) -f Makefile.target source_compile || exit 1 ; \
+			$(TOUCH) $(COMPILE_LOCK) ; \
+		fi ; \
+	else \
+		$(CP) $(MAKE_RULE_DIR)/Makefile.open $(TARGET_OBJ_DIR)/$(PKG_DIR)/Makefile.target ; \
+		if [ ! -f $(CONFIGURE_LOCK) ] ; then \
+			$(MAKE) -C $(TARGET_OBJ_DIR)/$(PKG_DIR) -f Makefile.target configuration || exit 1 ; \
+			$(RM) $(COMPILE_LOCK) ; \
+			$(TOUCH) $(CONFIGURE_LOCK) ; \
+		fi ; \
+		if [ ! -f $(COMPILE_LOCK) ] ; then \
+			$(MAKE) -C $(TARGET_OBJ_DIR)/$(PKG_DIR) -f Makefile.target source_compile || exit 1 ; \
+			$(TOUCH) $(COMPILE_LOCK) ; \
+		fi ; \
+	fi ;
+
+#
+# -- configure
+#
+configuration:
+	@if [ "$(BUILD_OUTSIDE)" = "y" ] ; then \
+		if [ "$(USE_HOST_PARAM)" = "n" ] ; then \
+			$(ECHO) $(CONFIG_VARS) ./configure --prefix=$(LOCAL_INSTALL_DIR) $(CONFIG_PARAMS) ; \
+			NM=$(NM) $(CONFIG_VARS) ./configure --prefix=$(LOCAL_INSTALL_DIR) $(CONFIG_PARAMS) ; \
+		else \
+			$(ECHO) $(CONFIG_VARS) ../$(PKG_DIR)/configure --prefix=$(LOCAL_INSTALL_DIR) --host=$(HOST_TYPE) $(CONFIG_PARAMS) ; \
+			NM=$(NM) $(CONFIG_VARS) ../$(PKG_DIR)/configure --prefix=$(LOCAL_INSTALL_DIR) --host=$(HOST_TYPE) $(CONFIG_PARAMS) ; \
+		fi ; \
+	else \
+		if [ "$(USE_HOST_PARAM)" = "n" ] ; then \
+			$(ECHO) $(CONFIG_VARS) ./configure --prefix=$(LOCAL_INSTALL_DIR) $(CONFIG_PARAMS) ; \
+			NM=$(NM) $(CONFIG_VARS) ./configure --prefix=$(LOCAL_INSTALL_DIR) $(CONFIG_PARAMS) ; \
+		else \
+			$(ECHO) $(CONFIG_VARS) ./configure --prefix=$(LOCAL_INSTALL_DIR) --host=$(HOST_TYPE) $(CONFIG_PARAMS) ; \
+			NM=$(NM) $(CONFIG_VARS) ./configure --prefix=$(LOCAL_INSTALL_DIR) --host=$(HOST_TYPE) $(CONFIG_PARAMS) ; \
+		fi ; \
+	fi ;
+
+#	
+# -- compile
+#
+source_compile:
+	@$(ECHO) "+++ compile $(PKG_DIR)"
+	$(MAKE)
+
+#	
+# -- install libary or exes
+#
+install:
+	@$(ECHO) "+++ install $(PKG_DIR)"
+	@if [ "$(BUILD_OUTSIDE)" = "y" ] ; then \
+		$(MAKE) -C $(TARGET_OBJ_DIR)/$(TARGET_OBJ_DIR) install ; \
+	else \
+		$(MAKE) -C $(TARGET_OBJ_DIR)/$(PKG_DIR) install ; \
+	fi
+#
+# -- user define clean
+#
+user_define_clean:
+	@if [ "x$(USER_DEFINE_CLEAN)" != "x" ] ; then \
+		for var_clean in $(USER_DEFINE_CLEAN) ; do \
+			$(MAKE) -f Makefile PLATFORM=$(PLATFORM) $$var_clean ; \
+		done ; \
+    fi ;
+#
+# -- clean
+#
+clean: user_define_clean
+	-@if [ -f $(TARGET_OBJ_DIR)/$(PKG_DIR)/Makefile ] ; then \
+		$(MAKE) -C $(TARGET_OBJ_DIR)/$(PKG_DIR) uninstall ; \
+	fi ;
+	$(RM) $(TARGET_OBJ_DIR)
+
+#
+# -- end --
+#

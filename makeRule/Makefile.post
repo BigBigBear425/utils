@@ -1,0 +1,116 @@
+#########################################################################
+# LEGALESE:   Copyright (c) 2008, Suntec Inc.
+# 
+#   This source code is confidential, proprietary, and contains trade
+#   secrets that are the sole property of Suntec Inc,.
+#   Copy and/or distribution of this source code or disassembly or
+#   reverse engineering of the resultant object code are strictly
+#   forbidden without the written consent of Suntec Inc,.
+#  -----------------------------------------------------------------------
+# 
+#  FILE NAME  :  Makefile
+#  -----------
+# 
+#  DESCRIPTION :
+#  -----------
+#   This make file is crated for application development environment. 
+#   The user must source MakeEnv at project top level to setup the 
+#   project make global environment variables.
+# 
+#  MODIFICATION HISTORY
+#  --------------------
+#  Thu Oct 16 08:31:34 PST 2008:created by Iori
+# 
+##########################################################################
+
+#
+# -- Define Rules to check if the install directories existed or not
+#
+check_install_dir:
+	@if [ ! -d $(LOCAL_INSTALL_BIN_DIR) ] ; then \
+		$(MKDIR) -p $(LOCAL_INSTALL_BIN_DIR) ; \
+	fi ; 
+	@if [ ! -d $(LOCAL_INSTALL_LIB_DIR) ] ; then \
+		$(MKDIR) -p $(LOCAL_INSTALL_LIB_DIR) ; \
+	fi ; 
+#
+# -- Define Rules to copy executables to the install bin directory
+#
+copy_curr_exec: check_install_dir
+	@if [ "x$(EXECS)" != "x" ] ; then \
+		for exec in $(EXECS) ; do \
+			$(ECHO) "+++ installing executable $$exec to " ; \
+			$(ECHO) "           install bin directory $(LOCAL_INSTALL_BIN_DIR) ..." ;\
+			$(CP) $(TARGET_EXE_DIR)/$$exec $(LOCAL_INSTALL_BIN_DIR) || exit 1 ; \
+		done ; \
+	fi ; 
+#
+# Define Rules to copy share libraries to the install lib directory
+#
+copy_curr_lib: check_install_dir copy_static_lib
+	@if [ "x$(SHARE_LIB)" != "x" ] ; then \
+		for lib in $(SHARE_LIB) ; do \
+			$(ECHO) "+++ installing share library $$lib to " ; \
+			$(ECHO) "           install lib directory $(LOCAL_INSTALL_LIB_DIR) ..." ;\
+			$(CP) $(TARGET_SHARE_LIB_DIR)/$$lib $(LOCAL_INSTALL_LIB_DIR) || exit 1 ; \
+		done ; \
+	fi ; 
+
+copy_static_lib:
+	@if [ "x$(STATIC_LIB)" != "x" ] ; then \
+		for lib in $(STATIC_LIB) ; do \
+			$(ECHO) "+++ installing static library $$lib to " ; \
+			$(ECHO) "           install static lib directory $(LOCAL_INSTALL_LIB_DIR) ..." ;\
+			$(CP) $(TARGET_STATIC_LIB_DIR)/$$lib $(LOCAL_INSTALL_LIB_DIR) || exit 1 ; \
+		done ; \
+	fi ; 
+#
+# Define rules for cleanup gracefully ...
+#
+.PHONY: clean_subdir
+clean_subdir:
+	@if [ "x$(SUB_DIRS)" != "x" ] ; then \
+		for subdir in $(SUB_DIRS) ; do \
+			$(MAKE) PLATFORM=$(PLATFORM) -C $$subdir clean ;\
+		done ; \
+	fi ; 
+#
+# Define rules for cleanup install executable gracefully ...
+#
+.PHONY: clean_install
+clean_install:
+	@if [ "x$(EXECS)" != "x" ] ; then \
+		for exec in $(EXECS) ; do \
+			$(RM) $(LOCAL_INSTALL_BIN_DIR)/$$exec ; \
+	 	done ; \
+	fi ; 
+	@if [ "x$(SHARE_LIB)" != "x" ] ; then \
+		for libfile in $(SHARE_LIB) ; do \
+			$(RM) $(LOCAL_INSTALL_LIB_DIR)/$$libfile ; \
+	 	done ; \
+	fi ; 
+	@if [ "x$(STATIC_LIB)" != "x" ] ; then \
+		for libfile in $(STATIC_LIB) ; do \
+			$(RM) $(LOCAL_INSTALL_LIB_DIR)/$$libfile ; \
+	 	done ; \
+	fi ;
+#
+# Define rules for cleanup install executable gracefully ...
+#
+.PHONY: clean_build
+clean_build:
+	$(RM) $(TARGET_OBJ_DIR)
+.PHONY: clean_depend
+clean_depend:
+	$(RM) .depend.$(PLATFORM)
+
+.PHONY: clean
+clean: clean_subdir clean_install clean_depend clean_build
+
+.PHONY: distclean
+distclean: clean
+	@$(RM) $(INSTALL_DIR)/*
+
+#
+# -- End --
+#

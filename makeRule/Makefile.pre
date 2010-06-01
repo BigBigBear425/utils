@@ -1,0 +1,220 @@
+#########################################################################
+# LEGALESE:   Copyright (c) 2008, Suntec Inc.
+# 
+#   This source code is confidential, proprietary, and contains trade
+#   secrets that are the sole property of Suntec Inc,.
+#   Copy and/or distribution of this source code or disassembly or
+#   reverse engineering of the resultant object code are strictly
+#   forbidden without the written consent of Suntec Inc,.
+#  -----------------------------------------------------------------------
+# 
+#  FILE NAME  :  Makefile
+#  -----------
+# 
+#  DESCRIPTION :
+#  -----------
+#   This make file is crated for application development environment. 
+#   The user must source MakeEnv at project top level to setup the 
+#   project make global environment variables.
+# 
+#  MODIFICATION HISTORY
+#  --------------------
+#  Thu Oct 16 08:31:34 PST 2008:created by Iori
+# 
+##########################################################################
+
+#
+# Top Level Makefile for all purposes
+#
+include $(MAKE_RULE_DIR)/config.mk
+
+ifneq ($(SHARE_LIB),)
+ifeq ($(SHARE_LIB_SRCS),)
+SHARE_LIB_SRCS += $(notdir $(wildcard *.c))
+SHARE_LIB_SRCS += $(notdir $(wildcard *.cpp))
+endif
+SHARE_LIB_OBJS := $(addsuffix .o,$(basename $(SHARE_LIB_SRCS)))
+endif
+
+ifneq ($(STATIC_LIB),)
+ifeq ($(STATIC_LIB_SRCS),)
+STATIC_LIB_SRCS += $(notdir $(wildcard *.c))
+STATIC_LIB_SRCS += $(notdir $(wildcard *.cpp))
+endif
+STATIC_LIB_OBJS := $(addsuffix .o,$(basename $(STATIC_LIB_SRCS)))
+endif
+
+ifneq ($(EXECS),)
+ifeq ($(EXE_SRCS),)
+EXE_SRCS += $(notdir $(wildcard *.c))
+EXE_SRCS += $(notdir $(wildcard *.cpp))
+endif
+EXE_OBJS := $(addsuffix .o,$(basename $(EXE_SRCS)))
+endif
+
+#
+# -- define rules to make the target objects
+#
+all:	pre_process \
+		check_obj_dir \
+		depend \
+		user_pre_process \
+		static_library \
+		share_library \
+		compile_execs \
+		user_define_targets \
+		copy_curr_lib \
+		copy_curr_exec \
+		sub_dirs
+
+#
+# -- define Common Rules 
+#
+.PRECIOUS:$(TARGET_OBJ_DIR)/%.o
+$(TARGET_OBJ_DIR)/%.o: %.c
+#	$(LINT) $(LINT_FLAG) $(INC_DIR) $<
+	@$(ECHO) "    Compiling $< to $@"
+	@$(GCC) $(INC_DIR) $(CFLAGS) -c $< -o $@
+
+$(TARGET_OBJ_DIR)/%.o: %.cpp
+#	$(LINT) $(LINT_FLAG) $(INC_DIR) $<
+	@$(ECHO) "    Compiling $< to $@"
+	@$(GPP) $(INC_DIR) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
+
+#
+# -- define rules that pre_process
+#
+pre_process:
+#	$(ECHO) "+++ install interface include file ..." ;
+#	$(MKDIR) $(PRJ_INC)/$(notdir $(shell 'pwd'))
+#	$(CP) iInc/* $(PRJ_INC)/$(notdir $(shell 'pwd'))
+
+#
+# -- define rules to make dependency file 
+#
+depend: $(EXE_SRCS) $(SHARE_LIBSRCS) $(STATIC_LIB_SRCS)
+	@if [ "x$^" != "x" ] ; then \
+		$(ECHO) "+++ building dependencies ..." ;\
+	    $(GPP) $(CFLAGS) $(INC_DIR) -MM $^ |\
+	        $(SED) "s/^\(.*\):/$(TARGET_OBJ_DIR)\/\1:/g" > .depend.$(PLATFORM) ; \
+	fi ;
+-include .depend.$(PLATFORM)
+#
+# -- define rules to check if the current object directory exists or not
+#
+check_obj_dir:
+	@if [ "x$(SHARE_LIB)" != "x" ] ; then \
+		$(MKDIR) $(TARGET_OBJ_DIR) ; \
+	fi ;
+	@if [ "x$(STATIC_LIB)" != "x" ] ; then \
+		$(MKDIR) $(TARGET_OBJ_DIR) ; \
+	fi ;
+	@if [ "x$(EXECS)" != "x" ] ; then \
+		$(MKDIR) $(TARGET_OBJ_DIR) ; \
+	fi ;
+
+#
+# -- define rules to traverse to sub-directories
+#
+.PHONY: sub_dirs
+sub_dirs:
+	@if [ "x$(SUB_DIRS)" != "x" ] ; then \
+	    for subdir in $(SUB_DIRS) ; do \
+	        $(MAKE) PLATFORM=$(PLATFORM) -C $$subdir || exit 1 ; \
+	    done ; \
+	fi ; 
+
+#
+# -- compile share library 
+#
+share_library:
+	@if [ "x$(SHARE_LIB)" != "x" ] ; then \
+		$(MAKE) -f Makefile PLATFORM=$(PLATFORM) \
+            $(patsubst %.so,$(TARGET_SHARE_LIB_DIR)/%.so,$(SHARE_LIB)) ; \
+    fi ;
+#
+# -- compile static library 
+#
+static_library:
+	@if [ "x$(STATIC_LIB)" != "x" ] ; then \
+		$(MAKE) -f Makefile PLATFORM=$(PLATFORM) \
+            $(patsubst %.a,$(TARGET_STATIC_LIB_DIR)/%.a,$(STATIC_LIB)) ; \
+    fi ;
+#
+# -- compile executables 
+#
+compile_execs:
+#	@if [ "x$(EXECS)" != "x" ] ; then \
+		$(MAKE) -f Makefile PLATFORM=$(PLATFORM) \
+            $(patsubst %,$(TARGET_EXE_DIR)/%,$(EXECS)) ; \
+    fi ;
+	@if [ "x$(EXECS)" != "x" ] ; then \
+		$(MAKE) -f Makefile PLATFORM=$(PLATFORM) exes ; \
+    fi ;
+#
+# -- user define targets
+#
+.PHONY: user_define_tagets
+user_define_targets:
+	@if [ "x$(USER_DEF_TARGETS)" != "x" ] ; then \
+		for var_user_target in $(USER_DEF_TARGETS) ; do \
+			$(MAKE) -f Makefile PLATFORM=$(PLATFORM) $$var_user_target || exit 1 ; \
+		done ; \
+    fi ;
+#
+# -- user define targets
+#
+user_pre_process:
+	@if [ "x$(USER_PRE_PROCESS)" != "x" ] ; then \
+		for var_user_target in $(USER_PRE_PROCESS) ; do \
+			$(MAKE) -f Makefile PLATFORM=$(PLATFORM) $$var_user_target || exit 1 ; \
+		done ; \
+    fi ;
+#
+# -- build shared library
+#
+$(TARGET_SHARE_LIB_DIR)/%.so: $(patsubst %.o,$(TARGET_OBJ_DIR)/%.o,$(SHARE_LIB_OBJS))
+	$(GPP) $(CFLAGS) -shared $^ -o $@ $(LIB_DIR) $(LDFLAGS)
+#	$(STRIP) $@
+#
+# -- build static library
+#
+$(TARGET_STATIC_LIB_DIR)/%.a: $(patsubst %.o,$(TARGET_OBJ_DIR)/%.o,$(STATIC_LIB_OBJS))
+	$(AR) -r $@ $^
+#
+# -- build exe
+#
+#$(TARGET_EXE_DIR)/%: $(patsubst %.o,$(TARGET_OBJ_DIR)/%.o,$(EXE_OBJS))
+exes: $(patsubst %.o,$(TARGET_OBJ_DIR)/%.o,$(EXE_OBJS))
+	$(GPP) $(CFLAGS) $^ -o $(TARGET_EXE_DIR)/$(EXECS) $(LIB_DIR) $(LDFLAGS)
+#	$(STRIP) $@
+
+
+#
+# -- build images
+#
+
+#	
+# -- define user help 
+#
+help:
+	@$(ECHO) ""
+	@$(ECHO) "usage: make PLATFORM=<X86/MIPS>"
+	@$(ECHO) ""
+	@$(ECHO) "if PLATFORM is not specified, MIPS is default"
+	@$(ECHO) ""
+	@$(ECHO) "all           - make all and copy to build area"
+	@$(ECHO) "sdk_build     - make sdk"
+	@$(ECHO) "open_build    - make open source"
+	@$(ECHO) "apps_build    - make applications"
+	@$(ECHO) "build_image   - make the target image"
+	@$(ECHO) "clean         - make clean based on <platform> and <target>"
+	@$(ECHO) "sdk_build     - make clean sdk"
+	@$(ECHO) "open_build    - make clean open source"
+	@$(ECHO) "apps_build    - make clean applications"
+	@$(ECHO) "help          - help message" 
+	@$(ECHO) ""
+
+#
+# -- end --
+#
